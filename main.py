@@ -18,11 +18,15 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, WebAppInfo
+from aiohttp import web
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
+import moduls.attendance as attendance_storage
+import moduls.attendance_handlers as attendance_handlers
+import moduls.attendance_webapp as attendance_webapp
 import moduls.backups as backup_service
 import moduls.broadcast as broadcast_service
 import moduls.db as dbm
@@ -315,6 +319,13 @@ async def start(
 
     buttons = InlineKeyboardBuilder()
     buttons.row(InlineKeyboardButton(text="Расписание", callback_data="schedule"))
+    buttons.row(InlineKeyboardButton(text="Посещаемость", callback_data="at:home"))
+    chat = event.chat if isinstance(event, types.Message) else event.message.chat
+    if config.ATTENDANCE_WEBAPP_URL and chat.type == ChatType.PRIVATE:
+        buttons.row(InlineKeyboardButton(
+            text="📱 Веб-приложение",
+            web_app=WebAppInfo(url=config.ATTENDANCE_WEBAPP_URL),
+        ))
     buttons.row(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     if _is_admin(user_data, event.from_user.id):
         buttons.row(InlineKeyboardButton(text="Админ-панель", callback_data="admin"))
@@ -1299,6 +1310,15 @@ async def force_update_command(message: types.Message) -> None:
         )
 
 
+attendance_handlers.install(
+    dp,
+    get_schedule=lambda: schedule,
+    get_reference=lambda: reference,
+    get_settings=lambda: settings,
+    is_admin=_is_admin,
+)
+
+
 @dp.message()
 async def delete_user_message(message: types.Message) -> None:
     try:
@@ -1310,6 +1330,7 @@ async def delete_user_message(message: types.Message) -> None:
 async def main() -> None:
     config.validate_runtime_config()
     await dbm.ensure_profile_schema()
+    await attendance_storage.ensure_schema()
     reload_runtime_data()
     bot = build_bot()
     scheduler = AsyncIOScheduler(timezone=config.BOT_TIMEZONE)
@@ -1350,7 +1371,23 @@ async def main() -> None:
     elif config.SCHEDULE_UPDATE_ON_STARTUP:
         startup_task = asyncio.create_task(scheduled_refresh(), name="startup-refresh")
 
+    web_runner: web.AppRunner | None = None
     try:
+        if config.ATTENDANCE_WEBAPP_URL:
+            mini_app = attendance_webapp.create_app(
+                get_schedule=lambda: schedule,
+                get_reference=lambda: reference,
+                get_settings=lambda: settings,
+            )
+            web_runner = web.AppRunner(mini_app)
+            await web_runner.setup()
+            await web.TCPSite(
+                web_runner,
+                host=config.ATTENDANCE_WEBAPP_BIND,
+                port=config.ATTENDANCE_WEBAPP_PORT,
+            ).start()
+            LOGGER.info("Mini App API слушает %s:%s",
+                        config.ATTENDANCE_WEBAPP_BIND, config.ATTENDANCE_WEBAPP_PORT)
         await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(
             bot,
@@ -1362,6 +1399,8 @@ async def main() -> None:
         if startup_task and not startup_task.done():
             startup_task.cancel()
             await asyncio.gather(startup_task, return_exceptions=True)
+        if web_runner is not None:
+            await web_runner.cleanup()
         await bot.session.close()
 
 

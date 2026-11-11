@@ -6,6 +6,9 @@ services:
       - .env
     environment:
       DB_HOST: ${DB_HOST:-db}
+      ATTENDANCE_WEBAPP_BIND: 0.0.0.0
+    ports:
+      - "127.0.0.1:${ATTENDANCE_WEBAPP_PORT:-8092}:${ATTENDANCE_WEBAPP_PORT:-8092}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

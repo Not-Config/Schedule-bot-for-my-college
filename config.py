@@ -34,6 +34,9 @@ TOKEN = os.getenv("BOT_TOKEN", "").strip()
 BOT_API_BASE_URL = os.getenv("BOT_API_BASE_URL", "").strip().rstrip("/")
 BOT_API_IS_LOCAL = _bool_env("BOT_API_IS_LOCAL", bool(BOT_API_BASE_URL))
 BOT_TIMEZONE = os.getenv("BOT_TIMEZONE", "Europe/Moscow").strip()
+ATTENDANCE_WEBAPP_URL = os.getenv("ATTENDANCE_WEBAPP_URL", "").strip().rstrip("/")
+ATTENDANCE_WEBAPP_BIND = os.getenv("ATTENDANCE_WEBAPP_BIND", "127.0.0.1").strip()
+ATTENDANCE_WEBAPP_PORT = _int_env("ATTENDANCE_WEBAPP_PORT", 8092)
 
 # Database
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1").strip()
@@ -149,6 +152,8 @@ def load_schedule_accounts(settings: dict[str, Any]) -> dict[str, dict[str, str]
     return accounts
 
 def validate_runtime_config() -> None:
+    if ATTENDANCE_WEBAPP_URL and not ATTENDANCE_WEBAPP_URL.startswith("https://"):
+        raise RuntimeError("Для Telegram Mini App нужен HTTPS-адрес ATTENDANCE_WEBAPP_URL")
     if not TOKEN:
         raise RuntimeError(
             "Не задан BOT_TOKEN. Скопируйте .env.example в .env и заполните его."
