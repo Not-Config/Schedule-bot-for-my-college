@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Расписание · Посещаемость</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">▦</span><div>
+        <div class="brand-title">Расписание</div><div class="brand-subtitle">Журнал посещаемости</div>
+      </div></div>
+      <div id="group-badge" class="group-badge">Загрузка…</div>
+    </header>
+    <div id="notice" class="notice hidden" role="alert"></div>
+    <main id="main" class="content" aria-live="polite">
+      <div class="empty">Открываем журнал…</div>
+    </main>
+    <nav id="tabs" class="tabs" aria-label="Разделы приложения" hidden>
+      <button type="button" data-page="schedule"><span aria-hidden="true">▤</span><span>Расписание</span></button>
+      <button type="button" data-page="attendance"><span aria-hidden="true">✓</span><span>Посещаемость</span></button>
+      <button type="button" data-page="stats"><span aria-hidden="true">▥</span><span>Статистика</span></button>
+      <button type="button" data-page="profile"><span aria-hidden="true">◉</span><span>Профиль</span></button>
+    </nav>
+  </div>
+</body>
+</html>
