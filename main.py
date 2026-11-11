@@ -23,6 +23,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
+import moduls.attendance as attendance_storage
+import moduls.attendance_handlers as attendance_handlers
 import moduls.backups as backup_service
 import moduls.broadcast as broadcast_service
 import moduls.db as dbm
@@ -315,6 +317,7 @@ async def start(
 
     buttons = InlineKeyboardBuilder()
     buttons.row(InlineKeyboardButton(text="Расписание", callback_data="schedule"))
+    buttons.row(InlineKeyboardButton(text="Посещаемость", callback_data="at:home"))
     buttons.row(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     if _is_admin(user_data, event.from_user.id):
         buttons.row(InlineKeyboardButton(text="Админ-панель", callback_data="admin"))
@@ -1299,6 +1302,14 @@ async def force_update_command(message: types.Message) -> None:
         )
 
 
+attendance_handlers.install(
+    dp,
+    get_schedule=lambda: schedule,
+    get_reference=lambda: reference,
+    is_admin=_is_admin,
+)
+
+
 @dp.message()
 async def delete_user_message(message: types.Message) -> None:
     try:
@@ -1310,6 +1321,7 @@ async def delete_user_message(message: types.Message) -> None:
 async def main() -> None:
     config.validate_runtime_config()
     await dbm.ensure_profile_schema()
+    await attendance_storage.ensure_schema()
     reload_runtime_data()
     bot = build_bot()
     scheduler = AsyncIOScheduler(timezone=config.BOT_TIMEZONE)
