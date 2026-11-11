@@ -130,6 +130,54 @@ async def ensure_schema() -> None:
         conn.close()
 
 
+async def fetch_roster_from_lk(group_name: str, credentials: dict[str, str]) -> str:
+    """Read one authorised roster search using the existing schedule login.
+
+    No cookies, passwords, raw HTML, or avatar payloads are persisted here.
+    """
+    from urllib.parse import urljoin, urlsplit
+
+    from moduls import schedule as schedule_source
+
+    session, _, authenticated_url = (
+        await schedule_source._authenticate_recovery_session(credentials)
+    )
+    try:
+        chat_url = urljoin(authenticated_url, "/chat/")
+        async with session.get(chat_url, allow_redirects=False) as response:
+            if response.status != 200:
+                raise ValueError("Не удалось открыть чат авторизованного ЛК")
+            chat_html = schedule_source._decode_body(await response.read())
+        if 'name="LOGIN"' in chat_html or "id=\"auth_form\"" in chat_html:
+            raise ValueError("Сессия ЛК потеряла авторизацию")
+
+        endpoint_url = urljoin(chat_url, "/ajax.handler.php")
+        parts = urlsplit(endpoint_url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        async with session.post(
+            endpoint_url,
+            data={"search_person": "1", "type": "", "value": group_name},
+            headers={
+                "Accept": "*/*",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": origin,
+                "Referer": chat_url,
+            },
+            allow_redirects=False,
+        ) as response:
+            if response.status != 200:
+                raise ValueError(f"Поиск студентов вернул HTTP {response.status}")
+            raw = await response.read()
+        if len(raw) > 2_000_000:
+            raise ValueError("Список студентов превысил 2 МБ")
+        text = schedule_source._decode_body(raw)
+        # Validate the returned student group before allowing an import.
+        parse_roster_html(text, group_name)
+        return text
+    finally:
+        await session.close()
+
+
 async def import_roster(source: str, group_name: str) -> int:
     students = parse_roster_html(source, group_name)
     conn = await dbm.connect()
