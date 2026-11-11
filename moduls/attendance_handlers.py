@@ -129,7 +129,7 @@ def _can_self_mark(day: date, start: str, end: str) -> bool:
         return False
 
 
-def install(dp, *, get_schedule, get_reference, is_admin) -> None:
+def install(dp, *, get_schedule, get_reference, get_settings, is_admin) -> None:
     """Register before the main module's catch-all message handler."""
 
     async def day_view(event, day: date):
@@ -387,6 +387,41 @@ def install(dp, *, get_schedule, get_reference, is_admin) -> None:
         await message.answer(f"Импортировано {count} записей группы {group}. "
                              "Не найденные в этом ответе студенты не удалялись.")
 
+    async def sync_cmd(message: types.Message):
+        data = await dbm.check_tg_id(message.from_user.id)
+        if message.chat.type != ChatType.PRIVATE or not is_admin(data, message.from_user.id):
+            await message.answer("Недостаточно прав")
+            return
+        args = (message.text or "").split(maxsplit=1)
+        if len(args) != 2 or args[1].strip() not in get_schedule():
+            await message.answer("Использование: /attendance_sync Т9-ИП-24-1")
+            return
+        group = args[1].strip()
+        credentials = config.load_schedule_accounts(get_settings()).get(group)
+        if not credentials:
+            await message.answer(
+                "Для этой группы в боте нет настроенного аккаунта ЛК. "
+                "Воспользуйтесь импортом HTML-файла."
+            )
+            return
+        notice = await message.answer("Запрашиваю список группы из ЛК…")
+        try:
+            source = await store.fetch_roster_from_lk(group, credentials)
+            count = await store.import_roster(source, group)
+        except Exception as exc:
+            await notice.edit_text(
+                "Не удалось загрузить список из ЛК: "
+                + html.escape(str(exc)[:300])
+                + "\nМожно импортировать HTML вручную.",
+                parse_mode="HTML",
+            )
+            return
+        await notice.edit_text(
+            f"Получено {count} студентов группы {html.escape(group)}. "
+            "Ранее найденные студенты не удалялись.",
+            parse_mode="HTML",
+        )
+
     async def starosta_cmd(message: types.Message):
         data = await dbm.check_tg_id(message.from_user.id)
         if message.chat.type != ChatType.PRIVATE or not is_admin(data, message.from_user.id):
@@ -530,6 +565,7 @@ def install(dp, *, get_schedule, get_reference, is_admin) -> None:
 
     dp.message.register(attendance_cmd, Command("attendance"))
     dp.message.register(import_cmd, Command("attendance_import"))
+    dp.message.register(sync_cmd, Command("attendance_sync"))
     dp.message.register(starosta_cmd, Command("attendance_starosta"))
     dp.message.register(revoke_cmd, Command("attendance_unstarosta"))
     dp.message.register(revoke_cmd, Command("attendance_unlink"))
