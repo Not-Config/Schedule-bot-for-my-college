@@ -223,6 +223,55 @@ async def grant_starosta(target_tg_id: int) -> str:
         conn.close()
 
 
+
+async def revoke_starosta(target_tg_id: int) -> int:
+    """Revoke starosta access for this Telegram user in every group."""
+    conn = await dbm.connect()
+    try:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """DELETE r FROM attendance_roles r JOIN users u ON u.id=r.user_id
+                WHERE u.tg_id=%s AND r.role='starosta'""",
+                (target_tg_id,),
+            )
+            count = int(cur.rowcount)
+        await conn.commit()
+        return count
+    except Exception:
+        await conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+async def unlink_identity(target_tg_id: int) -> int:
+    """Clear an incorrect approved identity and pending claim (admin only)."""
+    conn = await dbm.connect()
+    try:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT id FROM users WHERE tg_id=%s", (target_tg_id,))
+            row = await cur.fetchone()
+            if row is None:
+                return 0
+            internal_id = int(row[0])
+            await cur.execute(
+                "DELETE FROM attendance_identities WHERE user_id=%s",
+                (internal_id,),
+            )
+            deleted = int(cur.rowcount)
+            await cur.execute(
+                "DELETE FROM attendance_claims WHERE user_id=%s",
+                (internal_id,),
+            )
+        await conn.commit()
+        return deleted
+    except Exception:
+        await conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 async def claim_identity(user_id: int, person_id: str, login: str, group: str) -> None:
     conn = await dbm.connect()
     try:
