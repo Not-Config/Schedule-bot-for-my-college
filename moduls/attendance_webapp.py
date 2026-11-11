@@ -297,7 +297,10 @@ async def guard(request: web.Request, handler):
             if request.method not in ("GET", "POST"):
                 raise web.HTTPMethodNotAllowed(request.method, ["GET", "POST"])
             init_data = request.headers.get("X-Telegram-Init-Data", "")
-            user = verify_init_data(init_data, config.TOKEN)
+            try:
+                user = verify_init_data(init_data, config.TOKEN)
+            except ValueError as exc:
+                raise web.HTTPUnauthorized(reason=str(exc)) from exc
             request["telegram_id"] = user["id"]
         response = await handler(request)
     except PermissionError as exc:
@@ -310,7 +313,25 @@ async def guard(request: web.Request, handler):
         response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
+    if not request.path.startswith("/api/"):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; script-src 'self' https://telegram.org; "
+            "style-src 'self'; connect-src 'self'; img-src 'self'; "
+            "base-uri 'none'; frame-ancestors 'none'"
+        )
     return response
+
+
+async def _static_index(_: web.Request) -> web.FileResponse:
+    return web.FileResponse(WEB_DIR / "index.html")
+
+
+async def _static_js(_: web.Request) -> web.FileResponse:
+    return web.FileResponse(WEB_DIR / "app.js")
+
+
+async def _static_css(_: web.Request) -> web.FileResponse:
+    return web.FileResponse(WEB_DIR / "styles.css")
 
 
 def create_app(*, get_schedule, get_reference, get_settings) -> web.Application:
@@ -329,8 +350,8 @@ def create_app(*, get_schedule, get_reference, get_settings) -> web.Application:
         web.post("/api/mark", mark_view),
         web.post("/api/close", close_view),
         web.post("/api/approve", approve_view),
-        web.get("/", lambda _: web.FileResponse(WEB_DIR / "index.html")),
-        web.get("/app.js", lambda _: web.FileResponse(WEB_DIR / "app.js")),
-        web.get("/styles.css", lambda _: web.FileResponse(WEB_DIR / "styles.css")),
+        web.get("/", _static_index),
+        web.get("/app.js", _static_js),
+        web.get("/styles.css", _static_css),
     ])
     return app
