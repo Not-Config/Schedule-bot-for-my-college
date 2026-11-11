@@ -403,6 +403,26 @@ def install(dp, *, get_schedule, get_reference, is_admin) -> None:
             return
         await message.answer(f"Староста назначен для группы {group}.")
 
+    async def revoke_cmd(message: types.Message):
+        data = await dbm.check_tg_id(message.from_user.id)
+        if message.chat.type != ChatType.PRIVATE or not is_admin(data, message.from_user.id):
+            await message.answer("Недостаточно прав")
+            return
+        args = (message.text or "").split()
+        if len(args) != 2 or not args[1].isdigit():
+            await message.answer(
+                "Использование: /attendance_unstarosta TELEGRAM_ID "
+                "или /attendance_unlink TELEGRAM_ID"
+            )
+            return
+        target = int(args[1])
+        if args[0].startswith("/attendance_unstarosta"):
+            count = await store.revoke_starosta(target)
+            await message.answer(f"Снято ролей старосты: {count}")
+        else:
+            count = await store.unlink_identity(target)
+            await message.answer(f"Удалено подтверждённых привязок: {count}")
+
     async def attendance_callbacks(callback: types.CallbackQuery):
         try:
             bits = (callback.data or "").split(":")
@@ -511,4 +531,6 @@ def install(dp, *, get_schedule, get_reference, is_admin) -> None:
     dp.message.register(attendance_cmd, Command("attendance"))
     dp.message.register(import_cmd, Command("attendance_import"))
     dp.message.register(starosta_cmd, Command("attendance_starosta"))
+    dp.message.register(revoke_cmd, Command("attendance_unstarosta"))
+    dp.message.register(revoke_cmd, Command("attendance_unlink"))
     dp.callback_query.register(attendance_callbacks, F.data.startswith("at:"))
