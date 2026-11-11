@@ -1306,6 +1306,7 @@ attendance_handlers.install(
     dp,
     get_schedule=lambda: schedule,
     get_reference=lambda: reference,
+    get_settings=lambda: settings,
     is_admin=_is_admin,
 )
 
